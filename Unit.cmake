@@ -4,6 +4,31 @@ define_property (TARGET PROPERTY UNIT_TARGET_TYPE
         BRIEF_DOCS "Type of the registered unit target."
         FULL_DOCS "Supported values: Abstract, Concrete, ConcreteInterface, Interface.")
 
+# Defines which case framework uses for generating API macros. Support values:
+# - Pascal
+# - mixed_snake_case -- screaming case for macros and usual for files.
+set (UNIT_FRAMEWORK_API_CASE "Pascal")
+
+# Private utility function for unit configuration.
+# Populates values for UNIT_API_MACRO, UNIT_IMPLEMENTATION_MACRO and UNIT_API_FILE.
+function (private_generate_unit_api_variables API_UNIT_NAME)
+    # We expect unit name to follow the same case.
+    if (UNIT_FRAMEWORK_API_CASE STREQUAL "Pascal")
+        set (UNIT_API_MACRO "${API_UNIT_NAME}Api"  PARENT_SCOPE)
+        set (UNIT_IMPLEMENTATION_MACRO "${API_UNIT_NAME}Implementation"  PARENT_SCOPE)
+        set (UNIT_API_FILE "${API_UNIT_NAME}Api.h"  PARENT_SCOPE)
+
+    elseif (UNIT_FRAMEWORK_API_CASE STREQUAL "mixed_snake_case")
+        string (TOUPPER "${API_UNIT_NAME}" API_UNIT_NAME_UPPER)
+        set (UNIT_API_MACRO "${API_UNIT_NAME_UPPER}_API"  PARENT_SCOPE)
+        set (UNIT_IMPLEMENTATION_MACRO "${API_UNIT_NAME_UPPER}_IMPLEMENTATION" PARENT_SCOPE)
+        set (UNIT_API_FILE "${API_UNIT_NAME}_api.h"  PARENT_SCOPE)
+
+    else ()
+        message (FATAL_ERROR "Unknown API case value \"${UNIT_FRAMEWORK_API_CASE}\".")
+    endif ()
+endfunction ()
+
 # Starts configuration routine of interface unit: header-only library.
 function (register_interface UNIT_NAME)
     message (STATUS "Registering interface \"${UNIT_NAME}\"...")
@@ -71,6 +96,12 @@ function (interface_compile_options)
     target_compile_options ("${UNIT_NAME}" INTERFACE ${ARGV})
 endfunction ()
 
+# Adds interface compile definitions to current interface unit.
+function (interface_compile_definitions)
+    message (STATUS "    Add compile definitions \"${ARGV}\".")
+    target_compile_definitions ("${UNIT_NAME}" INTERFACE ${ARGV})
+endfunction ()
+
 define_property (TARGET PROPERTY REQUIRED_CONCRETE_UNIT
         BRIEF_DOCS "Name of concrete unit for this concrete unit interface."
         FULL_DOCS "Concrete units consist of two targets: interface with only headers and implementation objects.")
@@ -90,13 +121,15 @@ function (register_concrete UNIT_NAME)
 
     # Generate API header for shared library support.
     file (MAKE_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/Generated")
+    private_generate_unit_api_variables ("${UNIT_NAME}")
+    
     generate_api_header (
-            API_MACRO "${UNIT_NAME}Api"
-            EXPORT_MACRO "${UNIT_NAME}Implementation"
-            OUTPUT_FILE "${CMAKE_CURRENT_BINARY_DIR}/Generated/${UNIT_NAME}Api.hpp")
-    target_include_directories ("${UNIT_NAME}Interface" INTERFACE "${CMAKE_CURRENT_BINARY_DIR}/Generated")
-    target_compile_definitions ("${UNIT_NAME}" PRIVATE "${UNIT_NAME}Implementation")
+            API_MACRO "${UNIT_API_MACRO}"
+            EXPORT_MACRO "${UNIT_IMPLEMENTATION_MACRO}"
+            OUTPUT_FILE "${CMAKE_CURRENT_BINARY_DIR}/Generated/${UNIT_API_FILE}")
 
+    target_compile_definitions ("${UNIT_NAME}" PRIVATE "${UNIT_IMPLEMENTATION_MACRO}")
+    target_include_directories ("${UNIT_NAME}Interface" INTERFACE "${CMAKE_CURRENT_BINARY_DIR}/Generated")
     set (UNIT_NAME "${UNIT_NAME}" PARENT_SCOPE)
 endfunction ()
 
@@ -247,7 +280,8 @@ endfunction ()
 function (concrete_implements_abstract ABSTRACT_NAME)
     message (STATUS "    Implement abstract unit \"${ABSTRACT_NAME}\".")
     reflected_target_link_libraries (TARGET "${UNIT_NAME}" PRIVATE "${ABSTRACT_NAME}")
-    target_compile_definitions ("${UNIT_NAME}" PRIVATE "${ABSTRACT_NAME}Implementation")
+    private_generate_unit_api_variables ("${ABSTRACT_NAME}")
+    target_compile_definitions ("${UNIT_NAME}" PRIVATE "${UNIT_IMPLEMENTATION_MACRO}")
 endfunction ()
 
 # Starts configuration routine of abstract unit: headers that might have multiple implementations.
@@ -258,12 +292,14 @@ function (register_abstract UNIT_NAME)
 
     # Generate API header for shared library support.
     file (MAKE_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/Generated")
+    private_generate_unit_api_variables ("${UNIT_NAME}")
+    
     generate_api_header (
-            API_MACRO "${UNIT_NAME}Api"
-            EXPORT_MACRO "${UNIT_NAME}Implementation"
-            OUTPUT_FILE "${CMAKE_CURRENT_BINARY_DIR}/Generated/${UNIT_NAME}Api.hpp")
-    target_include_directories ("${UNIT_NAME}" INTERFACE "${CMAKE_CURRENT_BINARY_DIR}/Generated")
+            API_MACRO "${UNIT_API_MACRO}"
+            EXPORT_MACRO "${UNIT_IMPLEMENTATION_MACRO}"
+            OUTPUT_FILE "${CMAKE_CURRENT_BINARY_DIR}/Generated/${UNIT_API_FILE}")
 
+    target_include_directories ("${UNIT_NAME}" INTERFACE "${CMAKE_CURRENT_BINARY_DIR}/Generated")
     set (UNIT_NAME "${UNIT_NAME}" PARENT_SCOPE)
 endfunction ()
 
@@ -282,6 +318,11 @@ endfunction ()
 function (abstract_require)
     # Technically, abstract is an advanced interface. Therefore we're using some of the interface functions.
     interface_require (${ARGV})
+endfunction ()
+
+# Adds interface compile options to current abstract unit.
+function (abstract_compile_definitions)
+    interface_compile_definitions (${ARGV})
 endfunction ()
 
 define_property (TARGET PROPERTY IMPLEMENTATIONS
