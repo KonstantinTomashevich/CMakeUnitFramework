@@ -275,6 +275,29 @@ function (concrete_compile_options)
     endif ()
 endfunction ()
 
+# Adds compile definitions to current concrete unit.
+# Arguments:
+# - PUBLIC: compile definitions that are added to public scope.
+# - PRIVATE: compile definitions that are added to private scope.
+function (concrete_compile_definitions)
+    cmake_parse_arguments (DEFINITIONS "" "" "PUBLIC;PRIVATE" ${ARGV})
+    if (DEFINED DEFINITIONS_UNPARSED_ARGUMENTS OR (
+            NOT DEFINED DEFINITIONS_PUBLIC AND
+            NOT DEFINED DEFINITIONS_PRIVATE))
+        message (FATAL_ERROR "Incorrect function arguments!")
+    endif ()
+
+    if (DEFINED DEFINITIONS_PUBLIC)
+        message (STATUS "    Add public compile definitions \"${DEFINITIONS_PUBLIC}\".")
+        target_compile_definitions ("${UNIT_NAME}Interface" INTERFACE ${DEFINITIONS_PUBLIC})
+    endif ()
+
+    if (DEFINED DEFINITIONS_PRIVATE)
+        message (STATUS "    Add private compile definitions \"${DEFINITIONS_PRIVATE}\".")
+        target_compile_definitions ("${UNIT_NAME}" PRIVATE ${DEFINITIONS_PRIVATE})
+    endif ()
+endfunction ()
+
 # Informs build system that this concrete unit implements given abstract unit.
 # Needed to pass correct compile definitions to concrete unit objects.
 function (concrete_implements_abstract ABSTRACT_NAME)
