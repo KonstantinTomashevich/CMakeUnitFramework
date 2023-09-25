@@ -142,6 +142,17 @@ function (shared_library_verify)
     endforeach ()
 endfunction ()
 
+# Adds build commands for copying required linked artefacts to current shared library output location.
+function (shared_library_copy_linked_artefacts)
+    find_linked_shared_libraries (TARGET "${ARTEFACT_NAME}" OUTPUT REQUIRED_LIBRARIES)
+    foreach (LIBRARY_TARGET ${REQUIRED_LIBRARIES})
+        setup_shared_library_copy (
+                LIBRARY "${LIBRARY_TARGET}"
+                USER "${ARTEFACT_NAME}"
+                OUTPUT "$<TARGET_FILE_DIR:${ARTEFACT_NAME}>")
+    endforeach ()
+endfunction ()
+
 # Starts configuration routine of executable.
 function (register_executable ARTEFACT_NAME)
     message (STATUS "Registering executable \"${ARTEFACT_NAME}\"...")
@@ -180,11 +191,5 @@ endfunction ()
 
 # Adds build commands for copying required linked artefacts to current executable.
 function (executable_copy_linked_artefacts)
-    find_linked_shared_libraries (TARGET "${ARTEFACT_NAME}" OUTPUT REQUIRED_LIBRARIES)
-    foreach (LIBRARY_TARGET ${REQUIRED_LIBRARIES})
-        setup_shared_library_copy (
-                LIBRARY "${LIBRARY_TARGET}"
-                USER "${ARTEFACT_NAME}"
-                OUTPUT "$<TARGET_FILE_DIR:${ARTEFACT_NAME}>")
-    endforeach ()
+    shared_library_copy_linked_artefacts ()
 endfunction ()
