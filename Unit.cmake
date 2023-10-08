@@ -9,9 +9,11 @@ define_property (TARGET PROPERTY UNIT_TARGET_TYPE
 # - mixed_snake_case -- screaming case for macros and usual for files.
 set (UNIT_FRAMEWORK_API_CASE "Pascal")
 
-# Private utility function for unit configuration.
-# Populates values for UNIT_API_MACRO, UNIT_IMPLEMENTATION_MACRO and UNIT_API_FILE.
-function (private_generate_unit_api_variables API_UNIT_NAME)
+# Populates values for UNIT_API_MACRO, UNIT_IMPLEMENTATION_MACRO and UNIT_API_FILE with appropriate values.
+# UNIT_API_MACRO is a macro that is used to declare exported functions and symbols. UNIT_IMPLEMENTATION_MACRO is a macro
+# that is only defined in targets with exported functions and symbols implementations. UNIT_API_FILE is a name of file
+# with API macro (only file name, no path).
+function (get_unit_api_variables API_UNIT_NAME)
     # We expect unit name to follow the same case.
     if (UNIT_FRAMEWORK_API_CASE STREQUAL "Pascal")
         set (UNIT_API_MACRO "${API_UNIT_NAME}Api"  PARENT_SCOPE)
@@ -121,7 +123,7 @@ function (register_concrete UNIT_NAME)
 
     # Generate API header for shared library support.
     file (MAKE_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/Generated")
-    private_generate_unit_api_variables ("${UNIT_NAME}")
+    get_unit_api_variables ("${UNIT_NAME}")
     
     generate_api_header (
             API_MACRO "${UNIT_API_MACRO}"
@@ -140,6 +142,12 @@ function (concrete_sources)
         file (GLOB_RECURSE SOURCES "${PATTERN}")
         target_sources ("${UNIT_NAME}" PRIVATE ${SOURCES})
     endforeach ()
+endfunction ()
+
+# Directly adds given sources without globbing and checking for existence.
+function (concrete_sources_direct)
+    message (STATUS "    Add sources directly \"${ARGV}\".")
+    target_sources ("${UNIT_NAME}" PRIVATE ${ARGV})
 endfunction ()
 
 # Adds include directories to current concrete unit.
@@ -303,7 +311,7 @@ endfunction ()
 function (concrete_implements_abstract ABSTRACT_NAME)
     message (STATUS "    Implement abstract unit \"${ABSTRACT_NAME}\".")
     reflected_target_link_libraries (TARGET "${UNIT_NAME}" PRIVATE "${ABSTRACT_NAME}")
-    private_generate_unit_api_variables ("${ABSTRACT_NAME}")
+    get_unit_api_variables ("${ABSTRACT_NAME}")
     target_compile_definitions ("${UNIT_NAME}" PRIVATE "${UNIT_IMPLEMENTATION_MACRO}")
 endfunction ()
 
@@ -315,7 +323,7 @@ function (register_abstract UNIT_NAME)
 
     # Generate API header for shared library support.
     file (MAKE_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/Generated")
-    private_generate_unit_api_variables ("${UNIT_NAME}")
+    get_unit_api_variables ("${UNIT_NAME}")
     
     generate_api_header (
             API_MACRO "${UNIT_API_MACRO}"
