@@ -140,8 +140,9 @@ endfunction ()
 # - LIBRARY: shared library to copy.
 # - USER: user target to which we add copy target as dependency.
 # - OUTPUT: output directory to which shared library should be copied.
+# - DEPENDENCIES: optional list of additional dependencies for copy target, for example directory creation targets.
 function (setup_shared_library_copy)
-    cmake_parse_arguments (COPY "" "LIBRARY;USER;OUTPUT" "" ${ARGV})
+    cmake_parse_arguments (COPY "" "LIBRARY;USER;OUTPUT" "DEPENDENCIES" ${ARGV})
     if (DEFINED SEARCH_UNPARSED_ARGUMENTS OR
             NOT DEFINED COPY_LIBRARY OR
             NOT DEFINED COPY_USER OR
@@ -166,7 +167,7 @@ function (setup_shared_library_copy)
                 COMMAND_EXPAND_LISTS VERBATIM)
     endif ()
 
-    add_dependencies ("${CUSTOM_TARGET_NAME}" "${COPY_LIBRARY}")
+    add_dependencies ("${CUSTOM_TARGET_NAME}" "${COPY_LIBRARY}" ${DEPENDENCIES})
     add_dependencies ("${COPY_USER}" "${CUSTOM_TARGET_NAME}")
 endfunction ()
 
