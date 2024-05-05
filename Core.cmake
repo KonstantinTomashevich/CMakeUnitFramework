@@ -93,7 +93,8 @@ function (find_linked_targets_recursively)
                                 endif ()
                             endif ()
 
-                        else ()
+                        # Do not print warnings for standard C++ library and standard math library.
+                        elseif (NOT LINKED_TARGET STREQUAL "stdc++" AND NOT LINKED_TARGET STREQUAL "m")
                             message (WARNING "Unable to find linked target \"${LINKED_TARGET}\".")
                         endif ()
                     endforeach ()
