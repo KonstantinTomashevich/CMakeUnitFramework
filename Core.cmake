@@ -168,7 +168,7 @@ function (setup_shared_library_copy)
                 COMMAND_EXPAND_LISTS VERBATIM)
     endif ()
 
-    add_dependencies ("${CUSTOM_TARGET_NAME}" "${COPY_LIBRARY}" ${DEPENDENCIES})
+    add_dependencies ("${CUSTOM_TARGET_NAME}" "${COPY_LIBRARY}" ${COPY_DEPENDENCIES})
     add_dependencies ("${COPY_USER}" "${CUSTOM_TARGET_NAME}")
 endfunction ()
 
