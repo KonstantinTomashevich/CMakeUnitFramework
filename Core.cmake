@@ -15,6 +15,18 @@ define_property (TARGET PROPERTY PRIVATE_LINKED_TARGETS
         BRIEF_DOCS "Targets linked in PRIVATE scope to this target using reflected_target_link_libraries."
         FULL_DOCS "We use reflected_target_link_libraries in order to make it easy to traverse linking hierarchy.")
 
+# Shared library copying is done through pool to avoid situations where 2 different users copy the same library to
+# the same directory and build crashes due to having 2 concurrent copy commands with the same target.
+set (UNIT_FRAMEWORK_SHARED_LIBRARY_COPY_POOL "shared_library_copy_pool")
+
+get_property (JOB_POOLS GLOBAL PROPERTY JOB_POOLS)
+if (JOB_POOLS STREQUAL "JOB_POOLS-NOTFOUND")
+    set (JOB_POOLS)
+endif ()
+
+list (APPEND JOB_POOLS "${UNIT_FRAMEWORK_SHARED_LIBRARY_COPY_POOL}=1")
+set_property (GLOBAL PROPERTY JOB_POOLS ${JOB_POOLS})
+
 # Adapter for target_link_libraries that keeps linked libraries accessible in appropriate target properties.
 # Arguments:
 # - TARGET: target to which we are linking.
@@ -158,12 +170,14 @@ function (setup_shared_library_copy)
         add_custom_target ("${CUSTOM_TARGET_NAME}"
                 COMMAND ${CMAKE_COMMAND} -E copy
                 $<TARGET_SONAME_FILE:${COPY_LIBRARY}> "${COPY_OUTPUT}/$<TARGET_SONAME_FILE_NAME:${COPY_LIBRARY}>"
+                JOB_POOL "${UNIT_FRAMEWORK_SHARED_LIBRARY_COPY_POOL}"
                 COMMENT "Copying \"${COPY_LIBRARY}\" for \"${COPY_USER}\"."
                 COMMAND_EXPAND_LISTS VERBATIM)
     else ()
         add_custom_target ("${CUSTOM_TARGET_NAME}"
                 COMMAND ${CMAKE_COMMAND} -E copy
                 $<TARGET_FILE:${COPY_LIBRARY}> "${COPY_OUTPUT}/$<TARGET_FILE_NAME:${COPY_LIBRARY}>"
+                JOB_POOL "${UNIT_FRAMEWORK_SHARED_LIBRARY_COPY_POOL}"
                 COMMENT "Copying \"${COPY_LIBRARY}\" for \"${COPY_USER}\"."
                 COMMAND_EXPAND_LISTS VERBATIM)
     endif ()
