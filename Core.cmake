@@ -163,7 +163,11 @@ function (setup_shared_library_copy)
         message (FATAL_ERROR "Incorrect function arguments!")
     endif ()
 
-    set (CUSTOM_TARGET_NAME "Copy${COPY_LIBRARY}For${COPY_USER}")
+    # Prefix to put this target into the end of the list when viewing targets in GUI.
+    # Also puts them into the end of search list in most IDEs, which is convenient.
+    set (END_OF_THE_LIST_PREFIX "zzz")
+
+    set (CUSTOM_TARGET_NAME "${END_OF_THE_LIST_PREFIX}Copy${COPY_LIBRARY}For${COPY_USER}")
     string (REPLACE "::" "_" CUSTOM_TARGET_NAME "${CUSTOM_TARGET_NAME}")
 
     if (UNIX)
