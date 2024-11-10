@@ -132,16 +132,17 @@ function (register_concrete UNIT_NAME)
     reflected_target_link_libraries (TARGET "${UNIT_NAME}Highlight" PUBLIC "${UNIT_NAME}Interface")
 
     # Generate API header for shared library support.
-    file (MAKE_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/Generated")
+    set (GENERATED_DIRECTORY "${CMAKE_BINARY_DIR}/Generated/${UNIT_NAME}/")
+    file (MAKE_DIRECTORY "${GENERATED_DIRECTORY}")
     get_unit_api_variables ("${UNIT_NAME}")
     
     generate_api_header (
             API_MACRO "${UNIT_API_MACRO}"
             EXPORT_MACRO "${UNIT_IMPLEMENTATION_MACRO}"
-            OUTPUT_FILE "${CMAKE_CURRENT_BINARY_DIR}/Generated/${UNIT_API_FILE}")
+            OUTPUT_FILE "${GENERATED_DIRECTORY}/${UNIT_API_FILE}")
 
     target_compile_definitions ("${UNIT_NAME}" PRIVATE "${UNIT_IMPLEMENTATION_MACRO}")
-    target_include_directories ("${UNIT_NAME}Interface" INTERFACE "${CMAKE_CURRENT_BINARY_DIR}/Generated")
+    target_include_directories ("${UNIT_NAME}Interface" INTERFACE "${GENERATED_DIRECTORY}")
     set (UNIT_NAME "${UNIT_NAME}" PARENT_SCOPE)
 endfunction ()
 
@@ -352,15 +353,16 @@ function (register_abstract UNIT_NAME)
     set_target_properties ("${UNIT_NAME}" PROPERTIES UNIT_TARGET_TYPE "Abstract")
 
     # Generate API header for shared library support.
-    file (MAKE_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/Generated")
+    set (GENERATED_DIRECTORY "${CMAKE_BINARY_DIR}/Generated/${UNIT_NAME}/")
+    file (MAKE_DIRECTORY "${GENERATED_DIRECTORY}")
     get_unit_api_variables ("${UNIT_NAME}")
     
     generate_api_header (
             API_MACRO "${UNIT_API_MACRO}"
             EXPORT_MACRO "${UNIT_IMPLEMENTATION_MACRO}"
-            OUTPUT_FILE "${CMAKE_CURRENT_BINARY_DIR}/Generated/${UNIT_API_FILE}")
+            OUTPUT_FILE "${GENERATED_DIRECTORY}/${UNIT_API_FILE}")
 
-    target_include_directories ("${UNIT_NAME}" INTERFACE "${CMAKE_CURRENT_BINARY_DIR}/Generated")
+    target_include_directories ("${UNIT_NAME}" INTERFACE "${GENERATED_DIRECTORY}")
     set (UNIT_NAME "${UNIT_NAME}" PARENT_SCOPE)
 endfunction ()
 
