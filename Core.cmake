@@ -3,6 +3,10 @@
 # - Function for setting up shared library copying to user targets.
 # - Other minor improvements.
 
+# Copy target names can become too big on Windows for Windows short paths.
+option (CMAKE_UNIT_FRAMEWORK_USE_INDEX_FOR_COPY
+        "If true, uses index instead of readable name for copy targets to reduce path lengths." ON)
+
 define_property (TARGET PROPERTY INTERFACE_LINKED_TARGETS
         BRIEF_DOCS "Targets linked in INTERFACE scope to this target using reflected_target_link_libraries."
         FULL_DOCS "We use reflected_target_link_libraries in order to make it easy to traverse linking hierarchy.")
@@ -167,8 +171,19 @@ function (setup_shared_library_copy)
     # Also puts them into the end of search list in most IDEs, which is convenient.
     set (END_OF_THE_LIST_PREFIX "zzz")
 
-    set (CUSTOM_TARGET_NAME "${END_OF_THE_LIST_PREFIX}Copy${COPY_LIBRARY}For${COPY_USER}")
-    string (REPLACE "::" "_" CUSTOM_TARGET_NAME "${CUSTOM_TARGET_NAME}")
+    if (CMAKE_UNIT_FRAMEWORK_USE_INDEX_FOR_COPY)
+        get_property (COPY_INDEX GLOBAL PROPERTY INTERNAL_CMAKE_UNIT_FRAMEWORK_COPY_COUNT)
+        if (NOT COPY_INDEX)
+            set (COPY_INDEX 0)
+        endif ()
+
+        set (CUSTOM_TARGET_NAME "${END_OF_THE_LIST_PREFIX}Copy${COPY_INDEX}")
+        math (EXPR COPY_INDEX "${COPY_INDEX} + 1")
+        set_property (GLOBAL PROPERTY INTERNAL_CMAKE_UNIT_FRAMEWORK_COPY_COUNT "${COPY_INDEX}")
+    else ()
+        set (CUSTOM_TARGET_NAME "${END_OF_THE_LIST_PREFIX}Copy${COPY_INDEX}")
+        string (REPLACE "::" "_" CUSTOM_TARGET_NAME "${CUSTOM_TARGET_NAME}")
+    endif ()
 
     if (UNIX)
         add_custom_target ("${CUSTOM_TARGET_NAME}"
