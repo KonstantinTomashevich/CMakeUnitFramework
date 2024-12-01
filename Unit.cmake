@@ -428,7 +428,23 @@ function (abstract_register_implementation)
     set_target_properties ("${UNIT_NAME}" PROPERTIES IMPLEMENTATIONS "${IMPLEMENTATIONS}")
 endfunction ()
 
-# Outputs list of all implementations of request abstract unit.
+# Registers alias to an already registered implementation.
+# Arguments:
+# - ALIAS: name of the alias implementation.
+# - SOURCE: name of the source implementation.
+function (abstract_alias_implementation)
+    cmake_parse_arguments (IMPLEMENTATION "" "ALIAS;SOURCE" "" ${ARGN})
+    if (DEFINED IMPLEMENTATION_UNPARSED_ARGUMENTS OR
+            NOT DEFINED IMPLEMENTATION_ALIAS OR
+            NOT DEFINED IMPLEMENTATION_SOURCE)
+        message (FATAL_ERROR "Incorrect function arguments!")
+    endif ()
+
+    message (STATUS "    Add implementation alias \"${IMPLEMENTATION_ALIAS}\" to \"${IMPLEMENTATION_SOURCE}\".")
+    add_library ("${UNIT_NAME}${IMPLEMENTATION_ALIAS}Marker" ALIAS "${UNIT_NAME}${IMPLEMENTATION_SOURCE}Marker")
+endfunction ()
+
+# Outputs list of all implementations of requested abstract unit. Omits aliases.
 # Arguments:
 # - ABSTRACT: name of the abstract unit.
 # - OUTPUT: name of the output variable.

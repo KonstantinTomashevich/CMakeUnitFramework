@@ -45,15 +45,23 @@ function (shared_library_include)
                 set (IMPLEMENTATION_NAME "${CMAKE_MATCH_2}")
                 message (STATUS "    Add ${SCOPE_STRING} implementation \"${IMPLEMENTATION_NAME}\" of abstract \"${ABSTRACT_NAME}\".")
 
-                if (TARGET "${ABSTRACT_NAME}${IMPLEMENTATION_NAME}Marker")
-                    get_target_property (REMAP "${ABSTRACT_NAME}${IMPLEMENTATION_NAME}Marker" IMPLEMENTATION_REMAP)
+                set (IMPLEMENTATION_TARGET "${ABSTRACT_NAME}${IMPLEMENTATION_NAME}Marker")
+                # Redirect to aliased implementation if it is an alias,
+                # because it will be easier to verify library with aliases resolved.
+                get_target_property (ALIASED_IMPLEMENTATION "${IMPLEMENTATION_TARGET}" ALIASED_TARGET)
+
+                if (ALIASED_IMPLEMENTATION)
+                    set (IMPLEMENTATION_TARGET "${ALIASED_IMPLEMENTATION}")
+                endif ()
+
+                if (TARGET "${IMPLEMENTATION_TARGET}")
+                    get_target_property (REMAP "${IMPLEMENTATION_TARGET}" IMPLEMENTATION_REMAP)
 
                     if (REMAP STREQUAL "REMAP-NOTFOUND")
                         message (SEND_ERROR "Abstract \"${ABSTRACT_NAME}\" implementation \"${IMPLEMENTATION_NAME}\" is empty!")
                     else ()
                         reflected_target_link_libraries (
-                                TARGET "${ARTEFACT_NAME}"
-                                ${INCLUDE_SCOPE} "${ABSTRACT_NAME}${IMPLEMENTATION_NAME}Marker")
+                                TARGET "${ARTEFACT_NAME}" ${INCLUDE_SCOPE} "${IMPLEMENTATION_TARGET}")
 
                         foreach (PART_NAME ${REMAP})
                             message (STATUS "        Include part \"${PART_NAME}\".")
