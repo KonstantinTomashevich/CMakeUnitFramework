@@ -182,7 +182,7 @@ function (setup_shared_library_copy)
         math (EXPR COPY_INDEX "${COPY_INDEX} + 1")
         set_property (GLOBAL PROPERTY INTERNAL_CMAKE_UNIT_FRAMEWORK_COPY_COUNT "${COPY_INDEX}")
     else ()
-        set (CUSTOM_TARGET_NAME "${END_OF_THE_LIST_PREFIX}Copy${COPY_INDEX}")
+        set (CUSTOM_TARGET_NAME "${END_OF_THE_LIST_PREFIX}Copy${COPY_LIBRARY}For${COPY_USER}")
         string (REPLACE "::" "_" CUSTOM_TARGET_NAME "${CUSTOM_TARGET_NAME}")
     endif ()
 
