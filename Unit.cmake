@@ -542,8 +542,8 @@ function (concrete_preprocessing_queue_step_apply)
 
             add_custom_command (
                     OUTPUT "${STEP_OUTPUT}"
-                    COMMENT "Processing ${STEP_INPUT} with ${ARG_COMMAND}."
-                    DEPENDS "${STEP_INPUT}"
+                    COMMENT "Processing ${STEP_SOURCE} with ${ARG_COMMAND}."
+                    DEPENDS "${STEP_SOURCE}" ${ARG_COMMAND}
                     COMMAND ${ARG_COMMAND} ${COMMAND_ARGUMENTS}
                     COMMAND_EXPAND_LISTS
                     VERBATIM)
@@ -577,9 +577,11 @@ endfunction ()
 # - FILTER: Filter expression in format compatible with CMake MATCHES operation. Optional.
 # - ARGUMENTS: List of arguments that are passed to command.
 #              `$$INPUT` items are replaced with list of filtered source files at current generation.
+#              `$$INPUT_LIST` same as `$$INPUT`, but source files as saved to new line separated text list file and
+#              path to this file is provided.
 #              `$$PRODUCT` items are replaced with absolute product file name.
 function (concrete_preprocessing_queue_step_gather)
-    cmake_parse_arguments (ARG "" "COMMAND;PRODUCT;FILTER" "ARGUMENTS" ${ARGV})
+    cmake_parse_arguments (ARG "" "COMMAND;PRODUCT;FILTER" "ARGUMENTS;EXTRA_DEPENDENCIES" ${ARGV})
     if (DEFINED ARG_UNPARSED_ARGUMENTS OR
             NOT DEFINED ARG_COMMAND OR
             NOT DEFINED ARG_PRODUCT OR
@@ -603,6 +605,8 @@ function (concrete_preprocessing_queue_step_gather)
     set (PRODUCT_ABSOLUTE "${GENERATED_DIRECTORY}/${ARG_PRODUCT}")
 
     set (COMMAND_ARGUMENTS)
+    set (FILE_LISTS)
+
     foreach (ARGUMENT ${ARG_ARGUMENTS})
         if ("${ARGUMENT}" STREQUAL "$$INPUT")
             foreach (STEP_SOURCE INITIAL_SOURCE IN ZIP_LISTS STEP_SOURCES INITIAL_SOURCES)
@@ -610,6 +614,19 @@ function (concrete_preprocessing_queue_step_gather)
                     list (APPEND COMMAND_ARGUMENTS ${STEP_SOURCE})
                 endif ()
             endforeach ()
+
+        elseif ("${ARGUMENT}" STREQUAL "$$INPUT_LIST")
+            set (INPUTS)
+            foreach (STEP_SOURCE INITIAL_SOURCE IN ZIP_LISTS STEP_SOURCES INITIAL_SOURCES)
+                if (NOT ARG_FILTER OR "${INITIAL_SOURCE}" MATCHES "${ARG_FILTER}")
+                    list (APPEND INPUTS ${STEP_SOURCE})
+                endif ()
+            endforeach ()
+
+            list (JOIN INPUTS "\n" INPUT_LIST)
+            file (WRITE "${PRODUCT_ABSOLUTE}.input.list" "${INPUT_LIST}")
+            list (APPEND COMMAND_ARGUMENTS "${PRODUCT_ABSOLUTE}.input.list")
+            list (APPEND FILE_LISTS "${PRODUCT_ABSOLUTE}.input.list")
 
         elseif ("${ARGUMENT}" STREQUAL "$$PRODUCT")
             list (APPEND COMMAND_ARGUMENTS "${PRODUCT_ABSOLUTE}")
@@ -621,7 +638,7 @@ function (concrete_preprocessing_queue_step_gather)
     add_custom_command (
             OUTPUT "${PRODUCT_ABSOLUTE}"
             COMMENT "Gathering preprocessed data using ${ARG_COMMAND} for target \"${UNIT_NAME}\"."
-            DEPENDS ${STEP_SOURCES}
+            DEPENDS ${STEP_SOURCES} ${ARG_COMMAND} ${ARG_EXTRA_DEPENDENCIES} ${FILE_LISTS}
             COMMAND ${ARG_COMMAND} ${COMMAND_ARGUMENTS}
             COMMAND_EXPAND_LISTS
             VERBATIM)
@@ -633,6 +650,28 @@ function (concrete_preprocessing_queue_step_gather)
 
     list (APPEND PRODUCTS "${PRODUCT_ABSOLUTE}")
     set_target_properties ("${UNIT_NAME}" PROPERTIES INTERNAL_CONCRETE_GATHER_PRODUCTS "${PRODUCTS}")
+endfunction ()
+
+# Exclude source produced from given initial source at given absolute path from further preprocessing queue steps and
+# from compilation. Needed for rare cases when we've created temporary source that does not need to be compiled in the
+# end as it is only used for some preprocessing routines like processing headers of header-only unit.
+function (concrete_preprocessing_queue_exclude_source INITIAL_ABSOLUTE_PATH)
+    internal_concrete_preprocessing_queue_ensure_initialized ()
+    get_target_property (STEP_SOURCES "${UNIT_NAME}" INTERNAL_CONCRETE_SOURCES)
+    get_target_property (INITIAL_SOURCES "${UNIT_NAME}" INTERNAL_CONCRETE_SOURCES_INITIAL)
+
+    list (FIND INITIAL_SOURCES "${INITIAL_ABSOLUTE_PATH}" PATH_INDEX)
+    if (PATH_INDEX EQUAL -1)
+        message (SEND_ERROR "Unable to exclude \"${INITIAL_ABSOLUTE_PATH}\" from preprocessing queue sources "
+                "as it is not found among initial sources!")
+        return ()
+    endif ()
+
+    list (REMOVE_AT STEP_SOURCES ${PATH_INDEX})
+    list (REMOVE_AT INITIAL_SOURCES ${PATH_INDEX})
+
+    set_target_properties ("${UNIT_NAME}" PROPERTIES
+            INTERNAL_CONCRETE_SOURCES "${STEP_SOURCES}" INTERNAL_CONCRETE_SOURCES_INITIAL "${INITIAL_SOURCES}")
 endfunction ()
 
 # Starts configuration routine of abstract unit: headers that might have multiple implementations.
