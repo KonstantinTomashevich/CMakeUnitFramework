@@ -466,6 +466,26 @@ function (concrete_preprocessing_queue_step_preprocess)
         target_compile_options ("${UNIT_NAME}Preprocessed" PRIVATE "-E")
     endif ()
 
+    if ("${CMAKE_GENERATOR}" MATCHES "^Visual Studio.*$")
+        # Ninja allows us to seamlessly fake-compile sources into preprocessed ones. But it is much more difficult
+        # with Visual Studio as dependency on object files doesn't work for some reason and also Visual Studio tries
+        # to link object library for some reason.
+        # Therefore, we use plain MSBuild call in order to just compile (preprocess) our sources.
+        # Currently, we do not properly manage dependencies for this call as there is no active project that uses
+        # Visual Studio as development platform. It might be improved in the future.
+
+        add_custom_target (
+                "${UNIT_NAME}PreprocessedMSBuild"
+                COMMENT "Run preprocessor for ${UNIT_NAME} files."
+                DEPENDS ${STEP_SOURCES}
+                COMMAND
+                ${CMAKE_MAKE_PROGRAM}
+                "${CMAKE_CURRENT_BINARY_DIR}/${UNIT_NAME}Preprocessed.vcxproj"
+                /t:ClCompile
+                -maxCpuCount
+                VERBATIM)
+    endif ()
+
     set (SOURCE_INDEX 0)
     foreach (STEP_SOURCE ${STEP_SOURCES})
         set (SOURCE_RELATIVE "${STEP_SOURCE}")
@@ -473,19 +493,39 @@ function (concrete_preprocessing_queue_step_preprocess)
         set (STEP_OUTPUT "${PPQ_TARGET_DIR}/${SOURCE_RELATIVE}")
         set (COPY_SOURCE "$<LIST:GET,$<TARGET_OBJECTS:${UNIT_NAME}Preprocessed>,${SOURCE_INDEX}>")
 
-        # MSVC generates preprocessed files separately, therefore we need a workaround.
-        if (MSVC)
-            set_source_files_properties ("${STEP_SOURCE}"
-                    TARGET_DIRECTORY "${UNIT_NAME}Preprocessed"
-                    PROPERTIES COMPILE_OPTIONS "/P;/Fi$<SHELL_PATH:${COPY_SOURCE}>")
-        endif ()
+        if ("${CMAKE_GENERATOR}" MATCHES "^Visual Studio.*$")
+            # See the comment about Visual Studio above.
+            # Instead of directly specifying output, we use separate copy command through CMake.
+            # It is done to avoid situation when everything is being rebuilt every build as MSBuild overwrites files.
+            # Therefore, we let MSBuild do overwrites to temporary files and use CMake to copy only if there is
+            # a difference between new and old file.
 
-        add_custom_command (
-                OUTPUT "${STEP_OUTPUT}"
-                COMMENT "Copying ${STEP_OUTPUT}."
-                DEPENDS "${COPY_SOURCE}"
-                COMMAND ${CMAKE_COMMAND} -E copy_if_different "${COPY_SOURCE}" "${STEP_OUTPUT}"
-                VERBATIM)
+            cmake_path (GET STEP_OUTPUT PARENT_PATH STEP_OUTPUT_PARENT)
+            file (MAKE_DIRECTORY "${STEP_OUTPUT_PARENT}")
+
+            set_source_files_properties ("${STEP_SOURCE}" PROPERTIES
+                    COMPILE_OPTIONS "/P;/Fo$<SHELL_PATH:${STEP_OUTPUT}.i>")
+
+            add_custom_command (
+                    OUTPUT "${STEP_OUTPUT}"
+                    COMMENT "Copying ${STEP_OUTPUT}."
+                    DEPENDS "${UNIT_NAME}PreprocessedMSBuild"
+                    COMMAND ${CMAKE_COMMAND} -E copy_if_different "${STEP_OUTPUT}.i" "${STEP_OUTPUT}"
+                    VERBATIM)
+
+        else ()
+            if (MSVC)
+                set_source_files_properties ("${STEP_SOURCE}" PROPERTIES
+                        COMPILE_OPTIONS "/P;/Fi$<SHELL_PATH:${COPY_SOURCE}>")
+            endif ()
+
+            add_custom_command (
+                    OUTPUT "${STEP_OUTPUT}"
+                    COMMENT "Copying ${STEP_OUTPUT}."
+                    DEPENDS "${COPY_SOURCE}"
+                    COMMAND ${CMAKE_COMMAND} -E copy_if_different "${COPY_SOURCE}" "${STEP_OUTPUT}"
+                    VERBATIM)
+        endif ()
 
         math (EXPR SOURCE_INDEX "${SOURCE_INDEX} + 1")
         list (APPEND STEP_OUTPUTS "${STEP_OUTPUT}")
