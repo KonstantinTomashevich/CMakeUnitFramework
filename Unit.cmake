@@ -462,9 +462,7 @@ function (concrete_preprocessing_queue_step_preprocess)
     target_compile_definitions ("${UNIT_NAME}Preprocessed" PRIVATE $<TARGET_PROPERTY:${UNIT_NAME},COMPILE_DEFINITIONS>)
     target_compile_options ("${UNIT_NAME}Preprocessed" PRIVATE $<TARGET_PROPERTY:${UNIT_NAME},COMPILE_OPTIONS>)
 
-    if (MSVC)
-        target_compile_options ("${UNIT_NAME}Preprocessed" PRIVATE "/P")
-    else ()
+    if (NOT MSVC)
         target_compile_options ("${UNIT_NAME}Preprocessed" PRIVATE "-E")
     endif ()
 
@@ -473,16 +471,20 @@ function (concrete_preprocessing_queue_step_preprocess)
         set (SOURCE_RELATIVE "${STEP_SOURCE}")
         cmake_path (RELATIVE_PATH SOURCE_RELATIVE BASE_DIRECTORY "${PPQ_SOURCE_DIR}")
         set (STEP_OUTPUT "${PPQ_TARGET_DIR}/${SOURCE_RELATIVE}")
+        set (COPY_SOURCE "$<LIST:GET,$<TARGET_OBJECTS:${UNIT_NAME}Preprocessed>,${SOURCE_INDEX}>")
+
+        # MSVC generates preprocessed files separately, therefore we need a workaround.
+        if (MSVC)
+            set_source_files_properties ("${STEP_SOURCE}"
+                    TARGET_DIRECTORY "${UNIT_NAME}Preprocessed"
+                    PROPERTIES COMPILE_OPTIONS "/P;/Fi$<SHELL_PATH:${COPY_SOURCE}>")
+        endif ()
 
         add_custom_command (
                 OUTPUT "${STEP_OUTPUT}"
                 COMMENT "Copying ${STEP_OUTPUT}."
-                DEPENDS $<LIST:GET,$<TARGET_OBJECTS:${UNIT_NAME}Preprocessed>,${SOURCE_INDEX}>
-                COMMAND
-                ${CMAKE_COMMAND}
-                -E copy_if_different
-                "$<LIST:GET,$<TARGET_OBJECTS:${UNIT_NAME}Preprocessed>,${SOURCE_INDEX}>"
-                "${STEP_OUTPUT}"
+                DEPENDS "${COPY_SOURCE}"
+                COMMAND ${CMAKE_COMMAND} -E copy_if_different "${COPY_SOURCE}" "${STEP_OUTPUT}"
                 VERBATIM)
 
         math (EXPR SOURCE_INDEX "${SOURCE_INDEX} + 1")
