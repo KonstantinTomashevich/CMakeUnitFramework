@@ -23,6 +23,10 @@ define_property (TARGET PROPERTY PRIVATE_LINKED_TARGETS
 # the same directory and build crashes due to having 2 concurrent copy commands with the same target.
 set (UNIT_FRAMEWORK_SHARED_LIBRARY_COPY_POOL "shared_library_copy_pool")
 
+# Directory where build scripts used by CMakeUnitFramework are located.
+# Build scripts are called during project build for some special occasions when inbuilt commands are not enough.
+set (UNIT_FRAMEWORK_SCRIPTS "${CMAKE_CURRENT_LIST_DIR}/Scripts")
+
 get_property (JOB_POOLS GLOBAL PROPERTY JOB_POOLS)
 if (JOB_POOLS STREQUAL "JOB_POOLS-NOTFOUND")
     set (JOB_POOLS)

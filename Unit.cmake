@@ -457,22 +457,7 @@ function (concrete_preprocessing_queue_step_preprocess)
     set (STEP_OUTPUTS)
 
     if ("${CMAKE_GENERATOR}" MATCHES "^Visual Studio.*$")
-        # Ninja conveniently does lots of work required to preprocess sources, but with Visual Studio it is not the
-        # case. Due to how Visual Studio generator works, we cannot just force it to preprocess everything with
-        # required flags and be fine it, unfortunately. Therefore, we kind of need to simulate Ninja behavior on
-        # Visual Studio generator.
-        #
-        # To do this simulation, we manually add preprocessing custom commands to build tree. As it is quite difficult
-        # to properly setup depfile creation and convertion to CMake format and currently there is no project on
-        # this framework that uses Visual Studio generator as primary development generator (only CI builds), we do
-        # the preprocessing during each build execution. But we'd like to avoid calling full preprocessing queue
-        # every frame, therefore we use weird approach with custom target and ghost files.
-        #
-        # In the future, it would be good to implement proper depfiles here instead of current logic.
-        add_custom_command (
-                OUTPUT "${PPQ_TARGET_DIR}/always_build"
-                COMMENT "Starting always build for \"${PPQ_TARGET_DIR}\".")
-        set (VS_CUSTOM_DEPENDENCIES)
+        # No preparation steps for Visual Studio generator.
 
     else ()
         add_library ("${UNIT_NAME}Preprocessed" OBJECT)
@@ -496,14 +481,21 @@ function (concrete_preprocessing_queue_step_preprocess)
         set (COPY_SOURCE "$<LIST:GET,$<TARGET_OBJECTS:${UNIT_NAME}Preprocessed>,${SOURCE_INDEX}>")
 
         if ("${CMAKE_GENERATOR}" MATCHES "^Visual Studio.*$")
-            # See comment for the Visual Studio generator above.
+            # Ninja conveniently does lots of work required to preprocess sources, but with Visual Studio it is not the
+            # case. Due to how Visual Studio generator works, we cannot just force it to preprocess everything with
+            # required flags and be fine it, unfortunately. Therefore, we kind of need to simulate Ninja behavior on
+            # Visual Studio generator.
+            #
+            # To do this simulation, we manually add preprocessing custom commands to build tree and manually enable
+            # depfile generation for this command, converting it to CMake format if needed.
+
             cmake_path (GET STEP_OUTPUT PARENT_PATH STEP_OUTPUT_PARENT)
             file (MAKE_DIRECTORY "${STEP_OUTPUT_PARENT}")
 
             add_custom_command (
-                    OUTPUT "${STEP_OUTPUT}.i"
+                    OUTPUT "${STEP_OUTPUT}"
                     COMMENT "Preprocessing \"${STEP_SOURCE}\"."
-                    DEPENDS ${STEP_SOURCE} "${PPQ_TARGET_DIR}/always_build"
+                    DEPFILE "${STEP_OUTPUT}.deps"
 
                     # Compile command.
                     COMMAND
@@ -512,25 +504,20 @@ function (concrete_preprocessing_queue_step_preprocess)
                     $<TARGET_PROPERTY:${UNIT_NAME},COMPILE_OPTIONS>
                     $<LIST:TRANSFORM,$<TARGET_PROPERTY:${UNIT_NAME},COMPILE_DEFINITIONS>,PREPEND,-D>
                     $<LIST:TRANSFORM,$<TARGET_PROPERTY:${UNIT_NAME},INCLUDE_DIRECTORIES>,PREPEND,-I>
-                    /P /Fi$<SHELL_PATH:${STEP_OUTPUT}.i>
+                    /P /Fi$<SHELL_PATH:${STEP_OUTPUT}>
+                    /sourceDependencies "${STEP_OUTPUT}.deps.json"
                     -c $<SHELL_PATH:${STEP_SOURCE}>
 
-                    COMMAND_EXPAND_LISTS
-                    VERBATIM)
+                    # Depfile conversion command.
+                    COMMAND
+                    ${CMAKE_COMMAND}
+                    -D SOURCE="${STEP_SOURCE}"
+                    -D TARGET="${STEP_OUTPUT}"
+                    -D VS_DEPFILE="${STEP_OUTPUT}.deps.json"
+                    -D DEPFILE_OUTPUT="${STEP_OUTPUT}.deps"
+                    -P "${UNIT_FRAMEWORK_SCRIPTS}/VS2022DepfileToCMakeDepfile.cmake"
 
-            add_custom_command (
-                    OUTPUT "${STEP_OUTPUT}.always_build"
-                    COMMENT "Copying ${STEP_OUTPUT}."
-                    DEPENDS "${STEP_OUTPUT}.i" "${PPQ_TARGET_DIR}/always_build"
-                    COMMAND ${CMAKE_COMMAND} -E copy_if_different "${STEP_OUTPUT}.i" "${STEP_OUTPUT}"
-                    VERBATIM)
-
-            list (APPEND VS_CUSTOM_DEPENDENCIES "${STEP_OUTPUT}.always_build")
-
-            add_custom_command (
-                    OUTPUT "${STEP_OUTPUT}"
-                    COMMENT "Ensuring ${STEP_OUTPUT} is here."
-                    DEPENDS "${UNIT_NAME}Preprocessed")
+                    COMMAND_EXPAND_LISTS)
 
         else ()
             if (MSVC)
@@ -549,11 +536,6 @@ function (concrete_preprocessing_queue_step_preprocess)
         math (EXPR SOURCE_INDEX "${SOURCE_INDEX} + 1")
         list (APPEND STEP_OUTPUTS "${STEP_OUTPUT}")
     endforeach ()
-
-    if ("${CMAKE_GENERATOR}" MATCHES "^Visual Studio.*$")
-        # See comment for the Visual Studio generator above.
-        add_custom_target ("${UNIT_NAME}Preprocessed" DEPENDS ${VS_CUSTOM_DEPENDENCIES})
-    endif ()
 
     set_target_properties ("${UNIT_NAME}" PROPERTIES INTERNAL_CONCRETE_SOURCES "${STEP_OUTPUTS}")
 endfunction ()
