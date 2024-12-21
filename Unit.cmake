@@ -488,36 +488,73 @@ function (concrete_preprocessing_queue_step_preprocess)
             #
             # To do this simulation, we manually add preprocessing custom commands to build tree and manually enable
             # depfile generation for this command, converting it to CMake format if needed.
+            #
+            # As usual, clangcl toolset with Visual Studio generator needs additional handling: clang-cl has no inbuilt
+            # /sourceDependencies or alternative option right now. Therefore, we have no choice but to launch raw clang
+            # and ask it to generate GCC-style rules for us. It works, but looks strange.
 
             cmake_path (GET STEP_OUTPUT PARENT_PATH STEP_OUTPUT_PARENT)
             file (MAKE_DIRECTORY "${STEP_OUTPUT_PARENT}")
 
-            add_custom_command (
-                    OUTPUT "${STEP_OUTPUT}"
-                    COMMENT "Preprocessing \"${STEP_SOURCE}\"."
-                    DEPFILE "${STEP_OUTPUT}.deps"
+            if ("${CMAKE_CXX_COMPILER_ID}" MATCHES "^.*Clang$")
+                set (RAW_CLANG_PATH "${CMAKE_C_COMPILER}")
+                string (REPLACE "clang-cl" "clang" RAW_CLANG_PATH "${RAW_CLANG_PATH}")
 
-                    # Compile command.
-                    COMMAND
-                    ${CMAKE_C_COMPILER}
-                    /nologo
-                    $<TARGET_PROPERTY:${UNIT_NAME},COMPILE_OPTIONS>
-                    $<LIST:TRANSFORM,$<TARGET_PROPERTY:${UNIT_NAME},COMPILE_DEFINITIONS>,PREPEND,-D>
-                    $<LIST:TRANSFORM,$<TARGET_PROPERTY:${UNIT_NAME},INCLUDE_DIRECTORIES>,PREPEND,-I>
-                    /P /Fi$<SHELL_PATH:${STEP_OUTPUT}>
-                    /sourceDependencies "${STEP_OUTPUT}.deps.json"
-                    -c $<SHELL_PATH:${STEP_SOURCE}>
+                add_custom_command (
+                        OUTPUT "${STEP_OUTPUT}"
+                        COMMENT "Preprocessing \"${STEP_SOURCE}\"."
+                        DEPFILE "${STEP_OUTPUT}.deps"
 
-                    # Depfile conversion command.
-                    COMMAND
-                    ${CMAKE_COMMAND}
-                    -D SOURCE="${STEP_SOURCE}"
-                    -D TARGET="${STEP_OUTPUT}"
-                    -D VS_DEPFILE="${STEP_OUTPUT}.deps.json"
-                    -D DEPFILE_OUTPUT="${STEP_OUTPUT}.deps"
-                    -P "${UNIT_FRAMEWORK_SCRIPTS}/VS2022DepfileToCMakeDepfile.cmake"
+                        # Compile command.
+                        COMMAND
+                        ${CMAKE_C_COMPILER}
+                        $<TARGET_PROPERTY:${UNIT_NAME},COMPILE_OPTIONS>
+                        $<LIST:TRANSFORM,$<TARGET_PROPERTY:${UNIT_NAME},COMPILE_DEFINITIONS>,PREPEND,-D>
+                        $<LIST:TRANSFORM,$<TARGET_PROPERTY:${UNIT_NAME},INCLUDE_DIRECTORIES>,PREPEND,-I>
+                        /P /Fi$<SHELL_PATH:${STEP_OUTPUT}>
+                        -c $<SHELL_PATH:${STEP_SOURCE}>
 
-                    COMMAND_EXPAND_LISTS)
+                        # Depfile generation command using raw clang.
+                        COMMAND
+                        ${RAW_CLANG_PATH}
+                        # Options shouldn't be needed for depfile-only run.
+                        # And we cannot use the same options as for clang-cl as formats are different.
+                        $<LIST:TRANSFORM,$<TARGET_PROPERTY:${UNIT_NAME},COMPILE_DEFINITIONS>,PREPEND,-D>
+                        $<LIST:TRANSFORM,$<TARGET_PROPERTY:${UNIT_NAME},INCLUDE_DIRECTORIES>,PREPEND,-I>
+                        -o "${STEP_OUTPUT}"
+                        -MM -MF "${STEP_OUTPUT}.deps"
+                        -c $<SHELL_PATH:${STEP_SOURCE}>
+
+                        COMMAND_EXPAND_LISTS)
+
+            else ()
+                add_custom_command (
+                        OUTPUT "${STEP_OUTPUT}"
+                        COMMENT "Preprocessing \"${STEP_SOURCE}\"."
+                        DEPFILE "${STEP_OUTPUT}.deps"
+
+                        # Compile command.
+                        COMMAND
+                        ${CMAKE_C_COMPILER}
+                        /nologo
+                        $<TARGET_PROPERTY:${UNIT_NAME},COMPILE_OPTIONS>
+                        $<LIST:TRANSFORM,$<TARGET_PROPERTY:${UNIT_NAME},COMPILE_DEFINITIONS>,PREPEND,-D>
+                        $<LIST:TRANSFORM,$<TARGET_PROPERTY:${UNIT_NAME},INCLUDE_DIRECTORIES>,PREPEND,-I>
+                        /P /Fi$<SHELL_PATH:${STEP_OUTPUT}>
+                        /sourceDependencies "${STEP_OUTPUT}.deps.json"
+                        -c $<SHELL_PATH:${STEP_SOURCE}>
+
+                        # Depfile conversion command.
+                        COMMAND
+                        ${CMAKE_COMMAND}
+                        -D SOURCE="${STEP_SOURCE}"
+                        -D TARGET="${STEP_OUTPUT}"
+                        -D VS_DEPFILE="${STEP_OUTPUT}.deps.json"
+                        -D DEPFILE_OUTPUT="${STEP_OUTPUT}.deps"
+                        -P "${UNIT_FRAMEWORK_SCRIPTS}/VS2022DepfileToCMakeDepfile.cmake"
+
+                        COMMAND_EXPAND_LISTS)
+            endif ()
 
         else ()
             if (MSVC)
