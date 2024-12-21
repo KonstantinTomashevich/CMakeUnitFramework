@@ -456,34 +456,36 @@ function (concrete_preprocessing_queue_step_preprocess)
     get_target_property (STEP_SOURCES "${UNIT_NAME}" INTERNAL_CONCRETE_SOURCES)
     set (STEP_OUTPUTS)
 
-    add_library ("${UNIT_NAME}Preprocessed" OBJECT)
-    target_sources ("${UNIT_NAME}Preprocessed" PRIVATE ${STEP_SOURCES})
-    target_include_directories ("${UNIT_NAME}Preprocessed" PRIVATE $<TARGET_PROPERTY:${UNIT_NAME},INCLUDE_DIRECTORIES>)
-    target_compile_definitions ("${UNIT_NAME}Preprocessed" PRIVATE $<TARGET_PROPERTY:${UNIT_NAME},COMPILE_DEFINITIONS>)
-    target_compile_options ("${UNIT_NAME}Preprocessed" PRIVATE $<TARGET_PROPERTY:${UNIT_NAME},COMPILE_OPTIONS>)
-
-    if (NOT MSVC)
-        target_compile_options ("${UNIT_NAME}Preprocessed" PRIVATE "-E")
-    endif ()
-
     if ("${CMAKE_GENERATOR}" MATCHES "^Visual Studio.*$")
-        # Ninja allows us to seamlessly fake-compile sources into preprocessed ones. But it is much more difficult
-        # with Visual Studio as dependency on object files doesn't work for some reason and also Visual Studio tries
-        # to link object library for some reason.
-        # Therefore, we use plain MSBuild call in order to just compile (preprocess) our sources.
-        # Currently, we do not properly manage dependencies for this call as there is no active project that uses
-        # Visual Studio as development platform. It might be improved in the future.
+        # Ninja conveniently does lots of work required to preprocess sources, but with Visual Studio it is not the
+        # case. Due to how Visual Studio generator works, we cannot just force it to preprocess everything with
+        # required flags and be fine it, unfortunately. Therefore, we kind of need to simulate Ninja behavior on
+        # Visual Studio generator.
+        #
+        # To do this simulation, we manually add preprocessing custom commands to build tree. As it is quite difficult
+        # to properly setup depfile creation and convertion to CMake format and currently there is no project on
+        # this framework that uses Visual Studio generator as primary development generator (only CI builds), we do
+        # the preprocessing during each build execution. But we'd like to avoid calling full preprocessing queue
+        # every frame, therefore we use weird approach with custom target and ghost files.
+        #
+        # In the future, it would be good to implement proper depfiles here instead of current logic.
+        add_custom_command (
+                OUTPUT "${PPQ_TARGET_DIR}/always_build"
+                COMMENT "Starting always build for \"${PPQ_TARGET_DIR}\".")
+        set (VS_CUSTOM_DEPENDENCIES)
 
-        add_custom_target (
-                "${UNIT_NAME}PreprocessedMSBuild"
-                COMMENT "Run preprocessor for ${UNIT_NAME} files."
-                DEPENDS ${STEP_SOURCES}
-                COMMAND
-                ${CMAKE_MAKE_PROGRAM}
-                "${CMAKE_CURRENT_BINARY_DIR}/${UNIT_NAME}Preprocessed.vcxproj"
-                /t:ClCompile
-                -maxCpuCount
-                VERBATIM)
+    else ()
+        add_library ("${UNIT_NAME}Preprocessed" OBJECT)
+        target_sources ("${UNIT_NAME}Preprocessed" PRIVATE ${STEP_SOURCES})
+        target_include_directories ("${UNIT_NAME}Preprocessed" PRIVATE
+                $<TARGET_PROPERTY:${UNIT_NAME},INCLUDE_DIRECTORIES>)
+        target_compile_definitions ("${UNIT_NAME}Preprocessed" PRIVATE
+                $<TARGET_PROPERTY:${UNIT_NAME},COMPILE_DEFINITIONS>)
+        target_compile_options ("${UNIT_NAME}Preprocessed" PRIVATE $<TARGET_PROPERTY:${UNIT_NAME},COMPILE_OPTIONS>)
+
+        if (NOT MSVC)
+            target_compile_options ("${UNIT_NAME}Preprocessed" PRIVATE "-E")
+        endif ()
     endif ()
 
     set (SOURCE_INDEX 0)
@@ -494,24 +496,41 @@ function (concrete_preprocessing_queue_step_preprocess)
         set (COPY_SOURCE "$<LIST:GET,$<TARGET_OBJECTS:${UNIT_NAME}Preprocessed>,${SOURCE_INDEX}>")
 
         if ("${CMAKE_GENERATOR}" MATCHES "^Visual Studio.*$")
-            # See the comment about Visual Studio above.
-            # Instead of directly specifying output, we use separate copy command through CMake.
-            # It is done to avoid situation when everything is being rebuilt every build as MSBuild overwrites files.
-            # Therefore, we let MSBuild do overwrites to temporary files and use CMake to copy only if there is
-            # a difference between new and old file.
-
+            # See comment for the Visual Studio generator above.
             cmake_path (GET STEP_OUTPUT PARENT_PATH STEP_OUTPUT_PARENT)
             file (MAKE_DIRECTORY "${STEP_OUTPUT_PARENT}")
 
-            set_source_files_properties ("${STEP_SOURCE}" PROPERTIES
-                    COMPILE_OPTIONS "/P;/Fo$<SHELL_PATH:${STEP_OUTPUT}.i>")
+            add_custom_command (
+                    OUTPUT "${STEP_OUTPUT}.i"
+                    COMMENT "Preprocessing \"${STEP_SOURCE}\"."
+                    DEPENDS ${STEP_SOURCE} "${PPQ_TARGET_DIR}/always_build"
+
+                    # Compile command.
+                    COMMAND
+                    ${CMAKE_C_COMPILER}
+                    /nologo
+                    $<TARGET_PROPERTY:${UNIT_NAME},COMPILE_OPTIONS>
+                    $<LIST:TRANSFORM,$<TARGET_PROPERTY:${UNIT_NAME},COMPILE_DEFINITIONS>,PREPEND,-D>
+                    $<LIST:TRANSFORM,$<TARGET_PROPERTY:${UNIT_NAME},INCLUDE_DIRECTORIES>,PREPEND,-I>
+                    /P /Fi$<SHELL_PATH:${STEP_OUTPUT}.i>
+                    -c $<SHELL_PATH:${STEP_SOURCE}>
+
+                    COMMAND_EXPAND_LISTS
+                    VERBATIM)
+
+            add_custom_command (
+                    OUTPUT "${STEP_OUTPUT}.always_build"
+                    COMMENT "Copying ${STEP_OUTPUT}."
+                    DEPENDS "${STEP_OUTPUT}.i" "${PPQ_TARGET_DIR}/always_build"
+                    COMMAND ${CMAKE_COMMAND} -E copy_if_different "${STEP_OUTPUT}.i" "${STEP_OUTPUT}"
+                    VERBATIM)
+
+            list (APPEND VS_CUSTOM_DEPENDENCIES "${STEP_OUTPUT}.always_build")
 
             add_custom_command (
                     OUTPUT "${STEP_OUTPUT}"
-                    COMMENT "Copying ${STEP_OUTPUT}."
-                    DEPENDS "${UNIT_NAME}PreprocessedMSBuild"
-                    COMMAND ${CMAKE_COMMAND} -E copy_if_different "${STEP_OUTPUT}.i" "${STEP_OUTPUT}"
-                    VERBATIM)
+                    COMMENT "Ensuring ${STEP_OUTPUT} is here."
+                    DEPENDS "${UNIT_NAME}Preprocessed")
 
         else ()
             if (MSVC)
@@ -530,6 +549,11 @@ function (concrete_preprocessing_queue_step_preprocess)
         math (EXPR SOURCE_INDEX "${SOURCE_INDEX} + 1")
         list (APPEND STEP_OUTPUTS "${STEP_OUTPUT}")
     endforeach ()
+
+    if ("${CMAKE_GENERATOR}" MATCHES "^Visual Studio.*$")
+        # See comment for the Visual Studio generator above.
+        add_custom_target ("${UNIT_NAME}Preprocessed" DEPENDS ${VS_CUSTOM_DEPENDENCIES})
+    endif ()
 
     set_target_properties ("${UNIT_NAME}" PROPERTIES INTERNAL_CONCRETE_SOURCES "${STEP_OUTPUTS}")
 endfunction ()
