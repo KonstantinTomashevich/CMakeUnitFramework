@@ -503,6 +503,7 @@ function (concrete_preprocessing_queue_step_preprocess)
                 add_custom_command (
                         OUTPUT "${STEP_OUTPUT}"
                         COMMENT "Preprocessing \"${STEP_SOURCE}\"."
+                        DEPENDS "${STEP_SOURCE}"
                         DEPFILE "${STEP_OUTPUT}.deps"
 
                         # Compile command.
@@ -531,6 +532,7 @@ function (concrete_preprocessing_queue_step_preprocess)
                 add_custom_command (
                         OUTPUT "${STEP_OUTPUT}"
                         COMMENT "Preprocessing \"${STEP_SOURCE}\"."
+                        DEPENDS "${STEP_SOURCE}"
                         DEPFILE "${STEP_OUTPUT}.deps"
 
                         # Compile command.
