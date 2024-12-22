@@ -1,5 +1,8 @@
 # This file contains functions used by CMakeUnitFramework to generate code.
 
+# If set, added as prefix to export API macros. Useful for injection of custom pragma statements.
+set (UNIT_FRAMEWORK_API_MACRO_EXPORT_PREFIX "")
+
 # Writes given content to given file unless it already contains the same content.
 function (file_write_if_not_equal TARGET_FILE CONTENT)
     set (CURRENT_CONTENT)
@@ -33,14 +36,19 @@ function (generate_api_header)
     string (APPEND CONTENT "#if defined(_WIN32)\n")
     string (APPEND CONTENT "#    if defined(${GENERATE_EXPORT_MACRO})\n")
     string (APPEND CONTENT "// NOLINTNEXTLINE(readability-identifier-naming): API macro is named the same way as target for better readability.\n")
-    string (APPEND CONTENT "#        define ${GENERATE_API_MACRO} __declspec(dllexport)\n")
+    string (APPEND CONTENT "#        define ${GENERATE_API_MACRO} ${UNIT_FRAMEWORK_API_MACRO_EXPORT_PREFIX} __declspec(dllexport)\n")
     string (APPEND CONTENT "#    else\n")
     string (APPEND CONTENT "// NOLINTNEXTLINE(readability-identifier-naming): API macro is named the same way as target for better readability.\n")
     string (APPEND CONTENT "#        define ${GENERATE_API_MACRO} __declspec(dllimport)\n")
     string (APPEND CONTENT "#    endif\n")
     string (APPEND CONTENT "#else\n")
+    string (APPEND CONTENT "#    if defined(${GENERATE_EXPORT_MACRO})\n")
     string (APPEND CONTENT "// NOLINTNEXTLINE(readability-identifier-naming): API macro is named the same way as target for better readability.\n")
-    string (APPEND CONTENT "#    define ${GENERATE_API_MACRO}\n")
+    string (APPEND CONTENT "#        define ${GENERATE_API_MACRO} ${UNIT_FRAMEWORK_API_MACRO_EXPORT_PREFIX}\n")
+    string (APPEND CONTENT "#    else\n")
+    string (APPEND CONTENT "// NOLINTNEXTLINE(readability-identifier-naming): API macro is named the same way as target for better readability.\n")
+    string (APPEND CONTENT "#        define ${GENERATE_API_MACRO}\n")
+    string (APPEND CONTENT "#    endif\n")
     string (APPEND CONTENT "#endif\n")
 
     file_write_if_not_equal ("${GENERATE_OUTPUT_FILE}" "${CONTENT}")
