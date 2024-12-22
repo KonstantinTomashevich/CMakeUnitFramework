@@ -488,7 +488,7 @@ function (concrete_preprocessing_queue_step_preprocess)
             # Visual Studio generator.
             #
             # To do this simulation, we manually add preprocessing custom commands to build tree and manually enable
-            # depfile generation for this command, converting it to CMake format if needed.
+            # depfile generation for these commands, converting them to CMake format if needed.
             #
             # As usual, clangcl toolset with Visual Studio generator needs additional handling: clang-cl has no inbuilt
             # /sourceDependencies or alternative option right now. Therefore, we have no choice but to launch raw clang
@@ -582,7 +582,7 @@ endfunction ()
 
 # Preprocessing queue write step that runs arbitrary executable with given arguments on filtered sources.
 # This step takes sources from previous write step (or initial sources if there is no previous write step) and
-# adds custom commands that execute given command on these sources (separately for every source) in order to provide
+# adds custom commands that execute given executable on these sources (separately for every source) in order to provide
 # new generation of files. Filter is used to selectively update files, filtered out files will be just copied to the
 # new generation.
 #
@@ -653,22 +653,23 @@ function (concrete_preprocessing_queue_step_apply)
     set_target_properties ("${UNIT_NAME}" PROPERTIES INTERNAL_CONCRETE_SOURCES "${STEP_OUTPUTS}")
 endfunction ()
 
-# Processing queue gather step that runs arbitrary command on subset of files in order to produce one product file.
+# Processing queue gather step that runs arbitrary executable on subset of files in order to produce one product file.
 # Gather steps are used to extract data from filtered subsets of files from previous write step (or initial sources
 # if there is no previous write step) and save it as generated product source file, for example it can be reflection
-# for the whole unit. Product does not participates in preprocess generations. Command is executed for all files at
-# once and must always have one product file. As gather steps do not modify generation files, it can be executed
+# for the whole unit. Product does not participate in preprocess generations. Command is executed for all files at
+# once and must always have one product file. As gather steps do not modify generation files, they can be executed
 # simultaneously with other steps or compilation.
 #
 # Arguments:
 # - COMMAND: Name of the executable or executable target that is being executed.
 # - PRODUCT: Relative name of product file. Will be created in generation directory.
 # - FILTER: Filter expression in format compatible with CMake MATCHES operation. Optional.
-# - ARGUMENTS: List of arguments that are passed to command.
+# - ARGUMENTS: List of arguments that are passed to the executable.
 #              `$$INPUT` items are replaced with list of filtered source files at current generation.
-#              `$$INPUT_LIST` same as `$$INPUT`, but source files as saved to new line separated text list file and
-#              path to this file is provided.
+#              `$$INPUT_LIST` is the same as `$$INPUT`, but source files as saved to new line separated text list file
+#              and path to this file is provided.
 #              `$$PRODUCT` items are replaced with absolute product file name.
+# - EXTRA_DEPENDENCIES: Additional dependencies to be added to gather step command.
 function (concrete_preprocessing_queue_step_gather)
     cmake_parse_arguments (ARG "" "COMMAND;PRODUCT;FILTER" "ARGUMENTS;EXTRA_DEPENDENCIES" ${ARGV})
     if (DEFINED ARG_UNPARSED_ARGUMENTS OR
