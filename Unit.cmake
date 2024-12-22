@@ -150,6 +150,7 @@ function (register_concrete UNIT_NAME)
 
     add_library ("${UNIT_NAME}Highlight" OBJECT EXCLUDE_FROM_ALL "${UNIT_FRAMEWORK_HIGHLIGHT_STUB_SOURCE}")
     set_target_properties ("${UNIT_NAME}Highlight" PROPERTIES UNIT_TARGET_TYPE "Concrete")
+    target_compile_definitions ("${UNIT_NAME}Highlight" PRIVATE CMAKE_UNIT_FRAMEWORK_HIGHLIGHT)
     reflected_target_link_libraries (TARGET "${UNIT_NAME}Highlight" PUBLIC "${UNIT_NAME}Interface")
 
     # Generate API header for shared library support.
