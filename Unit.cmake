@@ -639,12 +639,26 @@ function (concrete_preprocessing_queue_step_apply)
 
             list (APPEND STEP_OUTPUTS "${STEP_OUTPUT}")
         else ()
-            add_custom_command (
-                    OUTPUT "${STEP_OUTPUT}"
-                    COMMENT "Copying ${STEP_SOURCE}."
-                    DEPENDS "${STEP_SOURCE}"
-                    COMMAND ${CMAKE_COMMAND} -E copy_if_different "${STEP_SOURCE}" "${STEP_OUTPUT}"
-                    VERBATIM)
+            if (PPQ_SOURCE_DIR STREQUAL CMAKE_CURRENT_SOURCE_DIR)
+                # We need to reference source file properly for compilation and debug information.
+                add_custom_command (
+                        OUTPUT "${STEP_OUTPUT}"
+                        COMMENT "Copying ${STEP_SOURCE}."
+                        DEPENDS "${STEP_SOURCE}"
+                        COMMAND
+                        ${CMAKE_COMMAND}
+                        -D INPUT="${STEP_SOURCE}"
+                        -D OUTPUT="${STEP_OUTPUT}"
+                        -P "${UNIT_FRAMEWORK_SCRIPTS}/CopyPrependLine.cmake")
+            else ()
+                add_custom_command (
+                        OUTPUT "${STEP_OUTPUT}"
+                        COMMENT "Copying ${STEP_SOURCE}."
+                        DEPENDS "${STEP_SOURCE}"
+                        COMMAND
+                        COMMAND ${CMAKE_COMMAND} -E copy_if_different "${STEP_SOURCE}" "${STEP_OUTPUT}"
+                        VERBATIM)
+            endif ()
 
             list (APPEND STEP_OUTPUTS "${STEP_OUTPUT}")
         endif ()
