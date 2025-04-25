@@ -1,0 +1,54 @@
+#!/usr/bin/perl
+
+# On Windows, both Clang and MSVC produce lines with "<built-in>" and "<command-line>" file names,
+# which confuses Ninja and makes it think that result is somehow dependent on these files, which
+# cannot not be found and therefore recompilation is always triggered.
+# The only way to fix it right now is to manually strip these lines and fix returning lines after them.
+
+my ($input_path, $output_path) = @ARGV;
+my $filtered_content = "";
+
+open (my $input_handle, '<', $input_path) or die $!;
+my $last_line_skipped_as_built_in = 0;
+
+while (<$input_handle>)
+{
+    if (/\"<((built-in)|(command line))>\"/)
+    {
+        # Skip this line as it is a built in line.
+        $last_line_skipped_as_built_in = 1;
+    }
+    else
+    {
+        if ($last_line_skipped_as_built_in and /2$/)
+        {
+            # Skip also, because it exists only due to built-ins.
+            # But do not skip next lines, as they're okay after that.
+        }
+        else
+        {
+            $filtered_content .= $_;
+        }
+
+        $last_line_skipped_as_built_in = 0;
+    }
+}
+
+close $input_handle;
+# We always need to check the current content and do not overwrite if it is the same.
+# Otherwise, file modification time will be updated and rebuild will be triggered.
+my $current_content = "";
+
+if (-e $output_path)
+{
+    open (my $output_in_handle, '<', $output_path) or die $!;
+    $current_content = do { local $/; <$output_in_handle> };
+    close $output_in_handle;
+}
+
+if ($filtered_content ne $current_content)
+{
+    open (my $output_out_handle, '>', $output_path) or die $!;
+    print $output_out_handle $filtered_content;
+    close $output_out_handle;
+}

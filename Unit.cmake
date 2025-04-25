@@ -565,12 +565,26 @@ function (concrete_preprocessing_queue_step_preprocess)
                         COMPILE_OPTIONS "/P;/Fi$<SHELL_PATH:${COPY_SOURCE}>")
             endif ()
 
-            add_custom_command (
-                    OUTPUT "${STEP_OUTPUT}"
-                    COMMENT "Copying ${STEP_OUTPUT}."
-                    DEPENDS "${COPY_SOURCE}"
-                    COMMAND ${CMAKE_COMMAND} -E copy_if_different "${COPY_SOURCE}" "${STEP_OUTPUT}"
-                    VERBATIM)
+            if (WIN32)
+                # See script for details.
+                # Perl script is used as it is much faster than Powershell and much more usable than CMake.
+                add_custom_command (
+                        OUTPUT "${STEP_OUTPUT}"
+                        COMMENT "Copying ${STEP_SOURCE} preprocess result with Windows-specific line filter."
+                        DEPENDS "${COPY_SOURCE}"
+                        COMMAND
+                        "perl"
+                        "${UNIT_FRAMEWORK_SCRIPTS}/WindowsFixPreprocessorOutputForNinja"
+                        "\"${COPY_SOURCE}\""
+                        "\"${STEP_OUTPUT}\"")
+            else ()
+                add_custom_command (
+                        OUTPUT "${STEP_OUTPUT}"
+                        COMMENT "Copying ${STEP_OUTPUT}."
+                        DEPENDS "${COPY_SOURCE}"
+                        COMMAND ${CMAKE_COMMAND} -E copy_if_different "${COPY_SOURCE}" "${STEP_OUTPUT}"
+                        VERBATIM)
+            endif ()
         endif ()
 
         math (EXPR SOURCE_INDEX "${SOURCE_INDEX} + 1")

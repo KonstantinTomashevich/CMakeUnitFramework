@@ -158,13 +158,12 @@ endfunction ()
 
 # Setups custom target for copying shared library to target directory for specified user.
 # Arguments:
-# - IF_DIFFERENT: flags that enables difference check before copying.
 # - LIBRARY: shared library to copy.
 # - USER: user target to which we add copy target as dependency.
 # - OUTPUT: output directory to which shared library should be copied.
 # - DEPENDENCIES: optional list of additional dependencies for copy target, for example directory creation targets.
 function (setup_shared_library_copy)
-    cmake_parse_arguments (COPY "IF_DIFFERENT" "LIBRARY;USER;OUTPUT" "DEPENDENCIES" ${ARGV})
+    cmake_parse_arguments (COPY "" "LIBRARY;USER;OUTPUT" "DEPENDENCIES" ${ARGV})
     if (DEFINED SEARCH_UNPARSED_ARGUMENTS OR
             NOT DEFINED COPY_LIBRARY OR
             NOT DEFINED COPY_USER OR
@@ -190,21 +189,16 @@ function (setup_shared_library_copy)
         string (REPLACE "::" "_" CUSTOM_TARGET_NAME "${CUSTOM_TARGET_NAME}")
     endif ()
 
-    set (COPY_COMMAND "copy")
-    if (COPY_IF_DIFFERENT)
-        set (COPY_COMMAND "copy_if_different")
-    endif ()
-
     if (UNIX)
         add_custom_target ("${CUSTOM_TARGET_NAME}"
-                COMMAND ${CMAKE_COMMAND} -E ${COPY_COMMAND}
+                COMMAND ${CMAKE_COMMAND} -E "copy_if_different"
                 $<TARGET_SONAME_FILE:${COPY_LIBRARY}> "${COPY_OUTPUT}/$<TARGET_SONAME_FILE_NAME:${COPY_LIBRARY}>"
                 JOB_POOL "${UNIT_FRAMEWORK_SHARED_LIBRARY_COPY_POOL}"
                 COMMENT "Copying \"${COPY_LIBRARY}\" for \"${COPY_USER}\"."
                 COMMAND_EXPAND_LISTS VERBATIM)
     else ()
         add_custom_target ("${CUSTOM_TARGET_NAME}"
-                COMMAND ${CMAKE_COMMAND} -E ${COPY_COMMAND}
+                COMMAND ${CMAKE_COMMAND} -E "copy_if_different"
                 $<TARGET_FILE:${COPY_LIBRARY}> "${COPY_OUTPUT}/$<TARGET_FILE_NAME:${COPY_LIBRARY}>"
                 JOB_POOL "${UNIT_FRAMEWORK_SHARED_LIBRARY_COPY_POOL}"
                 COMMENT "Copying \"${COPY_LIBRARY}\" for \"${COPY_USER}\"."
