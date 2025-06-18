@@ -33,6 +33,11 @@ set (UNIT_FRAMEWORK_API_CASE "Pascal")
 # highlight-only object libraries that should never be built, but are used to tell IDE how to highlight real sources.
 set (UNIT_FRAMEWORK_HIGHLIGHT_STUB_SOURCE "${CMAKE_CURRENT_LIST_DIR}/highlight_stub.c")
 
+# Directory under global/project source/binary directories that is considered third party and excluded from 
+# Cushion scan only header paths. Third party headers are excluded as user cannot guarantee that these headers
+# won't use check unsupported by Cushion.
+set (UNIT_FRAMEWORK_CUSHION_EXCLUDE_THIRD_PARTY_DIRECTORY "third_party")
+
 # Populates values for UNIT_API_MACRO, UNIT_IMPLEMENTATION_MACRO and UNIT_API_FILE with appropriate values.
 # UNIT_API_MACRO is a macro that is used to declare exported functions and symbols. UNIT_IMPLEMENTATION_MACRO is a macro
 # that is only defined in targets with exported functions and symbols implementations. UNIT_API_FILE is a name of file
@@ -449,6 +454,10 @@ endfunction ()
 # Also, this step can be used only once per concrete unit preprocessing queue!
 # It has no arguments as preprocessing is fully dependant on compiler configuration.
 function (concrete_preprocessing_queue_step_preprocess)
+    
+    # TODO: Deprecated. Should be removed in favor of total migration to Cushion when we finish with that.
+    message (DEPRECATION "concrete_preprocessing_queue_step_preprocess is deprecated.")
+    
     internal_concrete_preprocessing_queue_ensure_initialized ()
     internal_concrete_preprocessing_queue_setup_output_step (
             OUTPUT_SOURCE_DIR PPQ_SOURCE_DIR
@@ -590,6 +599,90 @@ function (concrete_preprocessing_queue_step_preprocess)
                         VERBATIM)
             endif ()
         endif ()
+
+        math (EXPR SOURCE_INDEX "${SOURCE_INDEX} + 1")
+        list (APPEND STEP_OUTPUTS "${STEP_OUTPUT}")
+    endforeach ()
+
+    set_target_properties ("${UNIT_NAME}" PROPERTIES INTERNAL_CONCRETE_SOURCES "${STEP_OUTPUTS}")
+endfunction ()
+
+# Preprocessing queue write step that runs Cushion preprocessor on sources.
+# Only include paths that point under target source directory are used for full include. 
+# And scan only includes under global source/binary and project source/binary dirs are allowed for scan only includes.
+# Additionally, UNIT_FRAMEWORK_CUSHION_EXCLUDE_THIRD_PARTY_DIRECTORY subdirectory of paths above is excluded from
+# scan only paths as user cannot guarantee that third party includes are not using defines unknown to Cushion.
+function (concrete_preprocessing_queue_step_cushion)
+    internal_concrete_preprocessing_queue_ensure_initialized ()
+    internal_concrete_preprocessing_queue_setup_output_step (
+            OUTPUT_SOURCE_DIR PPQ_SOURCE_DIR
+            OUTPUT_TARGET_DIR PPQ_TARGET_DIR)
+
+    if (NOT TARGET cushion)
+        message (FATAL_ERROR
+                "Called concrete_preprocessing_queue_step_cushion, but there is not registered \"cushion\" target.")
+    endif ()
+
+    get_target_property (STEP_SOURCES "${UNIT_NAME}" INTERNAL_CONCRETE_SOURCES)
+    set (STEP_OUTPUTS)
+    
+    # Build proper filtered include paths for Cushion.
+    set (ALL_INCLUDES "$<TARGET_PROPERTY:${UNIT_NAME},INCLUDE_DIRECTORIES>")
+    set (FULL_INCLUDES "$<LIST:FILTER,${ALL_INCLUDES},INCLUDE,^$<TARGET_PROPERTY:${UNIT_NAME},SOURCE_DIR>.*$>")
+    
+    set (SCAN_ONLY_ROOTS)
+    list (APPEND SCAN_ONLY_ROOTS 
+            "${CMAKE_SOURCE_DIR}" "${CMAKE_BINARY_DIR}" "${PROJECT_SOURCE_DIR}" "${PROJECT_BINARY_DIR}")
+    
+    set (INCLUDE_ROOTS "${SCAN_ONLY_ROOTS}")
+    list (TRANSFORM INCLUDE_ROOTS PREPEND "(")
+    list (TRANSFORM INCLUDE_ROOTS APPEND ")")
+    list (JOIN INCLUDE_ROOTS "|" SCAN_ONLY_INCLUDE_REGEX)
+
+    set (EXCLUDE_ROOTS "${SCAN_ONLY_ROOTS}")
+    list (TRANSFORM EXCLUDE_ROOTS PREPEND "(")
+    list (TRANSFORM EXCLUDE_ROOTS APPEND "/${UNIT_FRAMEWORK_CUSHION_EXCLUDE_THIRD_PARTY_DIRECTORY}/)")
+    list (JOIN EXCLUDE_ROOTS "|" SCAN_ONLY_EXCLUDE_REGEX)
+    
+    set (SCAN_ONLY_INCLUDES "$<LIST:FILTER,${ALL_INCLUDES},INCLUDE,^(${SCAN_ONLY_INCLUDE_REGEX}).*$>")
+    set (SCAN_ONLY_INCLUDES "$<LIST:FILTER,${SCAN_ONLY_INCLUDES},EXCLUDE,^(${SCAN_ONLY_EXCLUDE_REGEX}).*$>")
+    
+    set (DEFINES "$<LIST:FILTER,$<TARGET_PROPERTY:${UNIT_NAME},COMPILE_DEFINITIONS>,EXCLUDE,^__CUSHION_PRESERVE__.*$>")
+    
+    # Add compile definition to erase __CUSHION_PRESERVE__ 
+    # if it still exists in scan only headers during real compilation.
+    concrete_compile_definitions (PRIVATE __CUSHION_PRESERVE__=)
+    
+    # Run Cushion for every source file.
+
+    set (SOURCE_INDEX 0)
+    foreach (STEP_SOURCE ${STEP_SOURCES})
+        set (SOURCE_RELATIVE "${STEP_SOURCE}")
+        cmake_path (RELATIVE_PATH SOURCE_RELATIVE BASE_DIRECTORY "${PPQ_SOURCE_DIR}")
+        set (STEP_OUTPUT "${PPQ_TARGET_DIR}/${SOURCE_RELATIVE}")
+
+        cmake_path (GET STEP_OUTPUT PARENT_PATH STEP_OUTPUT_PARENT)
+        file (MAKE_DIRECTORY "${STEP_OUTPUT_PARENT}")
+        
+        add_custom_command (
+                OUTPUT "${STEP_OUTPUT}"
+                COMMENT "Preprocessing \"${STEP_SOURCE}\" using Cushion."
+                DEPENDS "${STEP_SOURCE}" "cushion"
+                DEPFILE "${STEP_OUTPUT}.deps"
+
+                # Compile command.
+                COMMAND
+                "cushion"
+                "--options" "forbid-macro-redefinition"
+                "--features" "defer" "wrapper-macro" "statement-accumulator"
+                "--input" "${STEP_SOURCE}"
+                "--output" "${STEP_OUTPUT}"
+                "--cmake-depfile" "${STEP_OUTPUT}.deps"
+                "--define" ${DEFINES}
+                "--include-full" ${FULL_INCLUDES}
+                "--include-scan" ${SCAN_ONLY_INCLUDES}
+
+                COMMAND_EXPAND_LISTS)
 
         math (EXPR SOURCE_INDEX "${SOURCE_INDEX} + 1")
         list (APPEND STEP_OUTPUTS "${STEP_OUTPUT}")
