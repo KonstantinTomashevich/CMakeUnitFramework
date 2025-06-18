@@ -469,6 +469,10 @@ function (concrete_preprocessing_queue_step_preprocess)
                 $<TARGET_PROPERTY:${UNIT_NAME},COMPILE_DEFINITIONS>)
         target_compile_options ("${UNIT_NAME}Preprocessed" PRIVATE $<TARGET_PROPERTY:${UNIT_NAME},COMPILE_OPTIONS>)
 
+        if ("${CMAKE_CXX_COMPILER_ID}" MATCHES "^.*Clang$")
+            target_compile_options ("${UNIT_NAME}Preprocessed" PRIVATE "-Wno-unused-command-line-argument")
+        endif ()
+
         if (NOT MSVC)
             target_compile_options ("${UNIT_NAME}Preprocessed" PRIVATE "-E")
         endif ()
