@@ -674,7 +674,8 @@ function (concrete_preprocessing_queue_step_cushion)
                 COMMAND
                 "cushion"
                 "--options" "forbid-macro-redefinition"
-                "--features" "defer" "wrapper-macro" "statement-accumulator" "snippet" "evaluated-argument"
+                "--features" 
+                "defer" "wrapper-macro" "statement-accumulator" "snippet" "evaluated-argument" "replacement-index"
                 "--input" "${STEP_SOURCE}"
                 "--output" "${STEP_OUTPUT}"
                 "--cmake-depfile" "${STEP_OUTPUT}.deps"
