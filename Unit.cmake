@@ -648,6 +648,15 @@ function (concrete_preprocessing_queue_step_cushion)
     set (SCAN_ONLY_INCLUDES "$<LIST:FILTER,${SCAN_ONLY_INCLUDES},EXCLUDE,^(${SCAN_ONLY_EXCLUDE_REGEX}).*$>")
     
     set (DEFINES "$<LIST:FILTER,$<TARGET_PROPERTY:${UNIT_NAME},COMPILE_DEFINITIONS>,EXCLUDE,^__CUSHION_PRESERVE__.*$>")
+    if (MSVC)
+        # Some MSVC-specific stuff is too intrusive and therefore we pass _MSC_VER to Cushion to deal with it.
+        set (DEFINES "${DEFINES};_MSC_VER")
+    endif ()
+
+    if ("${CMAKE_CXX_COMPILER_ID}" MATCHES "^.*Clang$")
+        # Some logic, especially connected to MSVC and Clang CL, might also depend on clang macro.
+        set (DEFINES "${DEFINES};__clang__")
+    endif ()
     
     # Add compile definition to erase __CUSHION_PRESERVE__ 
     # if it still exists in scan only headers during real compilation.
