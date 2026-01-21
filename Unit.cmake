@@ -33,9 +33,8 @@ set (UNIT_FRAMEWORK_API_CASE "Pascal")
 # highlight-only object libraries that should never be built, but are used to tell IDE how to highlight real sources.
 set (UNIT_FRAMEWORK_HIGHLIGHT_STUB_SOURCE "${CMAKE_CURRENT_LIST_DIR}/highlight_stub.c")
 
-# Directory under global/project source/binary directories that is considered third party and excluded from 
-# Cushion scan only header paths. Third party headers are excluded as user cannot guarantee that these headers
-# won't use check unsupported by Cushion.
+# Anything under directory with that name is considered third party and excluded from Cushion scan only header paths. 
+# Third party headers are excluded as user cannot guarantee that these headers won't use checks unsupported by Cushion.
 set (UNIT_FRAMEWORK_CUSHION_EXCLUDE_THIRD_PARTY_DIRECTORY "third_party")
 
 # Populates values for UNIT_API_MACRO, UNIT_IMPLEMENTATION_MACRO and UNIT_API_FILE with appropriate values.
@@ -471,21 +470,16 @@ function (concrete_preprocessing_queue_step_cushion)
     set (FULL_INCLUDES "$<LIST:FILTER,${ALL_INCLUDES},INCLUDE,^$<TARGET_PROPERTY:${UNIT_NAME},SOURCE_DIR>.*$>")
     
     set (SCAN_ONLY_ROOTS)
-    list (APPEND SCAN_ONLY_ROOTS 
-            "${CMAKE_SOURCE_DIR}" "${CMAKE_BINARY_DIR}" "${PROJECT_SOURCE_DIR}" "${PROJECT_BINARY_DIR}")
+    list (APPEND SCAN_ONLY_ROOTS "${CMAKE_SOURCE_DIR}" "${CMAKE_BINARY_DIR}")
     
     set (INCLUDE_ROOTS "${SCAN_ONLY_ROOTS}")
     list (TRANSFORM INCLUDE_ROOTS PREPEND "(")
     list (TRANSFORM INCLUDE_ROOTS APPEND ")")
     list (JOIN INCLUDE_ROOTS "|" SCAN_ONLY_INCLUDE_REGEX)
-
-    set (EXCLUDE_ROOTS "${SCAN_ONLY_ROOTS}")
-    list (TRANSFORM EXCLUDE_ROOTS PREPEND "(")
-    list (TRANSFORM EXCLUDE_ROOTS APPEND "/${UNIT_FRAMEWORK_CUSHION_EXCLUDE_THIRD_PARTY_DIRECTORY}/)")
-    list (JOIN EXCLUDE_ROOTS "|" SCAN_ONLY_EXCLUDE_REGEX)
     
+    set (EXCLUDE_MATCH "^.*\/${UNIT_FRAMEWORK_CUSHION_EXCLUDE_THIRD_PARTY_DIRECTORY}\/.*$")
     set (SCAN_ONLY_INCLUDES "$<LIST:FILTER,${ALL_INCLUDES},INCLUDE,^(${SCAN_ONLY_INCLUDE_REGEX}).*$>")
-    set (SCAN_ONLY_INCLUDES "$<LIST:FILTER,${SCAN_ONLY_INCLUDES},EXCLUDE,^(${SCAN_ONLY_EXCLUDE_REGEX}).*$>")
+    set (SCAN_ONLY_INCLUDES "$<LIST:FILTER,${SCAN_ONLY_INCLUDES},EXCLUDE,${EXCLUDE_MATCH}>")
     
     set (DEFINES "$<LIST:FILTER,$<TARGET_PROPERTY:${UNIT_NAME},COMPILE_DEFINITIONS>,EXCLUDE,^__CUSHION_PRESERVE__.*$>")
     if (MSVC)
